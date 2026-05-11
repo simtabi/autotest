@@ -6,23 +6,27 @@ Mass-generated AI tests are easy to produce and just as easy to pad coverage wit
 
 ## Status
 
-**Alpha (Phase 0 / 7).** Skeleton + PHP adapter inventory works end-to-end. Generation, verification, and mutation gate land in subsequent phases. Track progress in [PLAN.md](PLAN.md).
+**Alpha (Phase 1 / 7).** Inventory + generate-and-verify pipeline works end-to-end. Mutation gate, Writer/Reviewer, and the JS / Python adapters land in subsequent phases.
 
 ## What works today
 
-- `autotest --help` -- top-level CLI.
-- `autotest version` -- show installed version.
+- `autotest --help` / `autotest version` -- top-level CLI.
 - `autotest php inventory <path>` -- walk a PHP file or directory, list every public method / function (uses tree-sitter PHP).
+- `autotest php generate <path>` -- generate tests, run them via Pest, retry on failure up to `--max-attempts`, reject candidates that never pass.
+  - `--generator=claude` (default) uses Claude via LiteLLM. Requires `ANTHROPIC_API_KEY`.
+  - `--generator=fake` runs the whole pipeline with a deterministic stub generator -- useful for testing the orchestrator without burning tokens.
+  - `--dry-run` shows what would be generated without writing or running anything.
+  - `--method=<name>` targets a single method.
 
 ## What's coming
 
 | Phase | Status | Adds |
 |---|---|---|
-| 0. Skeleton + CI | **Now** | Repo, CLI, AST walker, PHP `inventory`. |
-| 1. PHP MVP | Next | `autotest php generate` end-to-end with Claude. |
-| 2. Mutation gate | | Pest `--mutate` + Infection wired in. Tests below MSI threshold are rejected. |
+| 0. Skeleton + CI | **Done** | Repo, CLI, AST walker, PHP `inventory`. |
+| 1. PHP MVP | **Done** | Generator interface, Claude backend via LiteLLM + Instructor, prompt builder with sibling-test few-shot slots, atomic test writer, subprocess test runner with retry feedback loop. |
+| 2. Mutation gate | Next | Pest `--mutate` + Infection wired in. Tests below MSI threshold are rejected. |
 | 3. Writer/Reviewer | | Two-pass LLM pattern for quality. |
-| 4. Convention learning | | Few-shot from sibling tests. |
+| 4. Convention learning | | Sibling-test scanner, project-convention inference. |
 | 5. PHP polish | | Budget cap, JSON output, GitHub Action mode. |
 | 6. JS / Vue adapter | | `autotest js`, Vitest + Stryker. |
 | 7. Python adapter | | `autotest python`, pytest + mutmut. |
@@ -45,14 +49,24 @@ pnpm add -D @simtabi/autotest-js
 
 The wrappers transparently delegate to the Python core.
 
-## Usage (Phase 0)
+## Usage (Phase 1)
 
 ```bash
-# Walk a PHP file and list public methods
+# Walk a PHP file and list public methods (no LLM, no API key needed)
 autotest php inventory src/Services/IconBrowserService.php
 
-# Walk a whole directory
-autotest php inventory src/
+# Generate tests with the fake generator (dry-run, no LLM, no test execution)
+autotest php generate src/Services/IconBrowserService.php \
+    --generator=fake --dry-run
+
+# Generate tests with Claude (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-...
+autotest php generate src/Services/IconBrowserService.php \
+    --project-root . --max-attempts=3
+
+# Target one method only
+autotest php generate src/Services/IconBrowserService.php \
+    --method=getStatistics
 ```
 
 ## Design (one paragraph)

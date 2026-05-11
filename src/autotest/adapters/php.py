@@ -90,7 +90,7 @@ _adapter = PhpAdapter()
 def register(app: typer.Typer) -> None:
     """Mount this adapter's commands on the parent Typer app."""
     app.command("inventory")(inventory)
-    # Later: app.command("generate")(generate), app.command("ci")(ci_mode), ...
+    app.command("generate")(generate)
 
 
 def inventory(
@@ -142,3 +142,72 @@ def _is_vendor(path: Path) -> bool:
     """Skip third-party code and build artifacts we never want to test."""
     parts = set(path.parts)
     return bool(parts & {"vendor", "node_modules", ".phpunit.cache", "build"})
+
+
+def generate(
+    target: Path = typer.Argument(..., help="PHP source file or directory to generate tests for."),
+    project_root: Path = typer.Option(
+        Path.cwd(), "--project-root", help="Root of the PHP project (where vendor/, tests/ live)."
+    ),
+    method: str | None = typer.Option(
+        None, "--method", help="Only generate a test for this method (matches by name)."
+    ),
+    max_attempts: int = typer.Option(3, "--max-attempts", help="Per-unit retry budget."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Don't write or run; print what would be generated."
+    ),
+    generator_name: str = typer.Option(
+        "claude", "--generator", help="Generator backend: claude | fake."
+    ),
+    model: str = typer.Option(
+        "claude-sonnet-4-6", "--model", help="LLM model id (LiteLLM format)."
+    ),
+) -> None:
+    """Generate tests for every public method / function in ``target``.
+
+    Phase 1 deliverable: scaffolds the test, runs Pest, retries on failure
+    up to ``--max-attempts``, and rejects candidates that never pass. The
+    Phase 2 mutation gate will reject *passing* tests that don't actually
+    catch mutants in the code under test.
+    """
+    # Imports kept local so the inventory command stays fast and doesn't
+    # eagerly pull in LiteLLM at module import time.
+    from ..orchestrator import GenerateOptions, collect_units, generate_for_units
+    from ..output.reporter import render_summary
+
+    units = collect_units(target, _adapter)
+    if method:
+        units = [u for u in units if u.name == method or u.name.endswith(f"::{method}")]
+
+    if not units:
+        console.print(f"[yellow]No matching public units in {target}[/yellow]")
+        raise typer.Exit(code=1)
+
+    gen = _resolve_generator(generator_name, model)
+
+    options = GenerateOptions(
+        project_root=project_root.resolve(),
+        max_attempts=max_attempts,
+        dry_run=dry_run,
+    )
+
+    summary = generate_for_units(units=units, adapter=_adapter, generator=gen, options=options)
+    render_summary(summary, console)
+
+    if summary.rejected and not dry_run:
+        raise typer.Exit(code=1)
+
+
+def _resolve_generator(name: str, model: str):
+    """Look up a generator by short name. Kept tiny so adding 'qodo' or
+    'openai' later is a one-line change."""
+    name = name.lower()
+    if name == "fake":
+        from ..generation.fake import FakeGenerator
+
+        return FakeGenerator()
+    if name == "claude":
+        from ..generation.claude import ClaudeGenerator
+
+        return ClaudeGenerator(model=model)
+    raise typer.BadParameter(f"Unknown generator: {name}. Use 'claude' or 'fake'.")
