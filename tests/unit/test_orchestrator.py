@@ -66,11 +66,16 @@ def test_dry_run_does_not_touch_disk(tmp_path):
 
 
 def test_orchestrator_accepts_a_passing_test(tmp_path):
+    """Phase 1 contract: passing test + mutation gate off -> accept on
+    attempt 1. Phase 2 adds the gate; this test deliberately disables it
+    to exercise just the runner-pass path."""
     adapter = PhpAdapter()
     unit = _stub_unit(tmp_path)
     gen = FakeGenerator()
 
-    options = GenerateOptions(project_root=tmp_path, max_attempts=1, run_formatter=False)
+    options = GenerateOptions(
+        project_root=tmp_path, max_attempts=1, run_formatter=False, mutation_gate=False
+    )
 
     # Mock the runner so subprocess never actually fires; pretend Pest
     # passed on the first attempt.
@@ -84,6 +89,7 @@ def test_orchestrator_accepts_a_passing_test(tmp_path):
     outcome = summary.accepted[0]
     assert outcome.test_path.exists()
     assert outcome.attempts == 1
+    assert outcome.gate is None  # gate was disabled
 
 
 def test_orchestrator_retries_on_failure_then_succeeds(tmp_path):
@@ -110,7 +116,9 @@ def test_orchestrator_retries_on_failure_then_succeeds(tmp_path):
         RunResult(passed=True, exit_code=0, stdout="OK", stderr=""),
     ]
 
-    options = GenerateOptions(project_root=tmp_path, max_attempts=3, run_formatter=False)
+    options = GenerateOptions(
+        project_root=tmp_path, max_attempts=3, run_formatter=False, mutation_gate=False
+    )
 
     with patch("autotest.orchestrator.run_filtered", side_effect=side_effects):
         summary = generate_for_units([unit], adapter, gen, options)

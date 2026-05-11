@@ -17,15 +17,22 @@ def render_summary(summary: RunSummary, console: Console | None = None) -> None:
     table.add_column("Unit", style="cyan", overflow="fold")
     table.add_column("Status", justify="center")
     table.add_column("Attempts", justify="right")
+    table.add_column("MSI", justify="right")
     table.add_column("Path", style="dim", overflow="fold")
     table.add_column("Reason", overflow="fold")
 
     for outcome in summary.outcomes:
         status = "[green]ACCEPTED[/green]" if outcome.accepted else "[red]REJECTED[/red]"
+        msi = (
+            f"{outcome.gate.score.msi:.1f}%"
+            if outcome.gate and outcome.gate.score
+            else "-"
+        )
         table.add_row(
             outcome.unit.name,
             status,
             str(outcome.attempts),
+            msi,
             str(outcome.test_path) if outcome.test_path else "-",
             outcome.reason,
         )

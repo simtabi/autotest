@@ -162,13 +162,24 @@ def generate(
     model: str = typer.Option(
         "claude-sonnet-4-6", "--model", help="LLM model id (LiteLLM format)."
     ),
+    mutation_gate: bool = typer.Option(
+        True,
+        "--mutation-gate/--no-mutation-gate",
+        help="Reject tests that don't kill enough mutants of the code under test.",
+    ),
+    mutation_min: float = typer.Option(
+        60.0, "--mutation-min", help="MSI threshold in percent (0-100)."
+    ),
+    mutation_timeout: int = typer.Option(
+        600, "--mutation-timeout", help="Per-test mutation runner timeout in seconds."
+    ),
 ) -> None:
     """Generate tests for every public method / function in ``target``.
 
-    Phase 1 deliverable: scaffolds the test, runs Pest, retries on failure
-    up to ``--max-attempts``, and rejects candidates that never pass. The
-    Phase 2 mutation gate will reject *passing* tests that don't actually
-    catch mutants in the code under test.
+    Pipeline: AST inventory -> LLM generate -> write -> run Pest with
+    ``--filter`` -> on pass, run the mutation gate -> accept iff MSI
+    meets ``--mutation-min``. Failures (runner or gate) feed structured
+    error context back into the next attempt up to ``--max-attempts``.
     """
     # Imports kept local so the inventory command stays fast and doesn't
     # eagerly pull in LiteLLM at module import time.
@@ -189,6 +200,9 @@ def generate(
         project_root=project_root.resolve(),
         max_attempts=max_attempts,
         dry_run=dry_run,
+        mutation_gate=mutation_gate,
+        mutation_min=mutation_min,
+        mutation_timeout=mutation_timeout,
     )
 
     summary = generate_for_units(units=units, adapter=_adapter, generator=gen, options=options)

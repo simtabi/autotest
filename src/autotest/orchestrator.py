@@ -26,6 +26,7 @@ from .generation.base import (
 )
 from .inventory.ast import DiscoveredUnit, discover
 from .output.writer import WriteResult, remove_test, write_test
+from .quality.gate import GateResult, run_gate
 from .verification.runner import RunResult, run_filtered
 
 
@@ -40,6 +41,7 @@ class UnitOutcome:
     final_test: GeneratedTest | None = None
     last_run: RunResult | None = None
     write: WriteResult | None = None
+    gate: GateResult | None = None
     failed_attempts: list[FailedAttempt] = field(default_factory=list)
     reason: str = ""
 
@@ -69,6 +71,9 @@ class GenerateOptions:
     run_formatter: bool = True
     test_runner_timeout: int = 120
     sibling_test_examples: int = 3
+    mutation_gate: bool = True       # opt out with --no-mutation-gate
+    mutation_min: float = 60.0       # MSI threshold in percent
+    mutation_timeout: int = 600      # mutation tests are slow; 10 min default
 
 
 def generate_for_units(
@@ -158,20 +163,47 @@ def _generate_one(
         )
 
         if run.passed:
-            return UnitOutcome(
-                unit=unit,
-                accepted=True,
-                attempts=attempt,
-                test_path=test_path,
-                final_test=candidate,
-                last_run=run,
-                write=write,
-                failed_attempts=failed,
-                reason="passed",
-            )
+            # Test passes the runner. Now the real check: does it actually
+            # catch regressions? Run the mutation gate unless explicitly
+            # disabled.
+            gate = _maybe_run_mutation_gate(adapter, options, candidate.test_name)
 
-        # Failed -- remove the candidate and feed the error back so the
-        # next attempt can fix it.
+            if gate is None or gate.passed:
+                return UnitOutcome(
+                    unit=unit,
+                    accepted=True,
+                    attempts=attempt,
+                    test_path=test_path,
+                    final_test=candidate,
+                    last_run=run,
+                    write=write,
+                    gate=gate,
+                    failed_attempts=failed,
+                    reason="passed + mutation gate" if gate else "passed (gate off)",
+                )
+
+            # The test passes but doesn't kill enough mutants -- treat it
+            # like a runner failure and feed structured feedback back to
+            # the LLM so the next attempt writes stricter assertions.
+            remove_test(test_path)
+            failed.append(
+                FailedAttempt(
+                    test_code=candidate.test_code,
+                    error=(
+                        f"Mutation gate rejected this test: {gate.reason}. "
+                        "The test passes the runner but doesn't catch enough "
+                        "mutants of the function under test. Strengthen the "
+                        "assertions (check return values precisely, exercise "
+                        "edge cases) so a mutated version of the function "
+                        "would make this test fail."
+                    ),
+                    output=(gate.score.raw_output if gate.score else "")[:4_000],
+                )
+            )
+            continue
+
+        # Test runner failed -- remove the candidate and feed the error
+        # back so the next attempt can fix it.
         remove_test(test_path)
         failed.append(
             FailedAttempt(
@@ -190,6 +222,27 @@ def _generate_one(
         last_run=run if "run" in locals() else None,
         failed_attempts=failed,
         reason=f"all {options.max_attempts} attempts failed",
+    )
+
+
+def _maybe_run_mutation_gate(
+    adapter: LanguageAdapter,
+    options: GenerateOptions,
+    test_name: str,
+) -> GateResult | None:
+    """Run the mutation gate if enabled. Returns None when the gate is
+    off so the orchestrator can short-circuit cleanly."""
+    if not options.mutation_gate:
+        return None
+
+    mutation_cmd = adapter.mutation_command(options.project_root)
+    return run_gate(
+        cmd=mutation_cmd.cmd,
+        cwd=mutation_cmd.cwd,
+        score_format=mutation_cmd.score_format,
+        threshold=options.mutation_min,
+        test_filter=test_name,
+        timeout=options.mutation_timeout,
     )
 
 
