@@ -51,8 +51,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install
-        run: pip install -e .
+      - name: Install with PHP extra (tree-sitter-php is opt-in)
+        run: pip install -e '.[php]'
 
       - name: autotest --help
         run: autotest --help
@@ -62,3 +62,6 @@ jobs:
 
       - name: autotest php inventory on a fixture
         run: autotest php inventory tests/fixtures/php/SampleService.php
+
+      - name: autotest php generate (dry-run with fake generator)
+        run: autotest php generate tests/fixtures/php/SampleService.php --generator=fake --dry-run
