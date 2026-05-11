@@ -1,9 +1,9 @@
-"""In-process fake generator used by tests.
+"""In-process fakes for tests.
 
 Lets us exercise the full orchestrator pipeline (prompt -> generate ->
-write -> run -> retry) without an API call. The fake stores every request
-it sees, so tests can also assert on the prompt context the orchestrator
-hands to a real generator.
+write -> run -> retry, plus optional Writer/Reviewer) without an API
+call. Every call is recorded so tests can also assert on the prompt
+context handed to a real generator.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .base import GeneratedTest, GenerationRequest
+from .reviewer import ReviewCritique, Reviewer
 
 
 class FakeGenerator:
@@ -54,4 +55,33 @@ it('{test_name}', function () {{
         test_name=test_name,
         rationale="Stub from FakeGenerator (test infrastructure only).",
         targets=[request.unit.name],
+    )
+
+
+class FakeReviewer(Reviewer):
+    """Deterministic ``Reviewer`` for tests.
+
+    ``responder`` lets a test pick the critique per (request, draft);
+    the default ships nothing as-is and flags one generic weak-
+    assertion finding so the WriterReviewer pipeline takes the revise
+    path.
+    """
+
+    def __init__(
+        self,
+        responder: Callable[[GenerationRequest, GeneratedTest], ReviewCritique] | None = None,
+    ) -> None:
+        self._responder = responder or _default_critique
+        self.calls: list[tuple[GenerationRequest, GeneratedTest]] = []
+
+    def review(self, request: GenerationRequest, draft: GeneratedTest) -> ReviewCritique:
+        self.calls.append((request, draft))
+        return self._responder(request, draft)
+
+
+def _default_critique(_request: GenerationRequest, _draft: GeneratedTest) -> ReviewCritique:
+    return ReviewCritique(
+        findings=["The draft only asserts truthiness; it doesn't pin the return value."],
+        suggestions=["Replace toBeTrue() with toBe(<expected concrete value>)."],
+        ship_as_is=False,
     )

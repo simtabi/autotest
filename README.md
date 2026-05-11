@@ -6,7 +6,7 @@ Mass-generated AI tests are easy to produce and just as easy to pad coverage wit
 
 ## Status
 
-**Alpha (Phase 2 / 7).** Inventory + generate-and-verify + mutation gate work end-to-end. Writer/Reviewer pattern, convention learning, and the JS / Python adapters land in subsequent phases.
+**Alpha (Phase 3 / 7).** Inventory + generate-and-verify + mutation gate + Writer/Reviewer pattern all work end-to-end. Convention learning, polish, and the JS / Python adapters land in subsequent phases.
 
 ## What works today
 
@@ -19,6 +19,8 @@ Mass-generated AI tests are easy to produce and just as easy to pad coverage wit
   - `--method=<name>` targets a single method.
   - `--mutation-min=N` raises / lowers the MSI threshold (default `60`).
   - `--no-mutation-gate` skips the mutation step (faster, but no guarantee the test catches regressions).
+  - `--reviewer` enables Anthropic's two-pass Writer/Reviewer flow (Sonnet writes, Opus critiques, Sonnet revises). Triples LLM cost; off by default.
+  - `--reviewer-model=<id>` swaps the reviewer model (default `claude-opus-4-7`).
 
 ## What's coming
 
@@ -27,8 +29,8 @@ Mass-generated AI tests are easy to produce and just as easy to pad coverage wit
 | 0. Skeleton + CI | **Done** | Repo, CLI, AST walker, PHP `inventory`. |
 | 1. PHP MVP | **Done** | Generator interface, Claude backend via LiteLLM + Instructor, prompt builder with sibling-test few-shot slots, atomic test writer, subprocess test runner with retry feedback loop. |
 | 2. Mutation gate | **Done** | Pest `--mutate` + Infection score parsers, MSI threshold gate, structured "your test passes but doesn't catch mutants -- strengthen the assertions" feedback into retry. |
-| 3. Writer/Reviewer | Next | Two-pass LLM pattern for quality. |
-| 4. Convention learning | | Sibling-test scanner, project-convention inference. |
+| 3. Writer/Reviewer | **Done** | Writer/Reviewer composite generator, structured `ReviewCritique` output via Instructor, reviewer findings get piped through the existing retry path so the writer's revision prompt always sees the critique. |
+| 4. Convention learning | Next | Sibling-test scanner, project-convention inference. |
 | 5. PHP polish | | Budget cap, JSON output, GitHub Action mode. |
 | 6. JS / Vue adapter | | `autotest js`, Vitest + Stryker. |
 | 7. Python adapter | | `autotest python`, pytest + mutmut. |

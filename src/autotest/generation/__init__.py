@@ -8,14 +8,25 @@ from .base import (
     ProjectConventions,
 )
 from .claude import ClaudeGenerator
-from .fake import FakeGenerator
+from .fake import FakeGenerator, FakeReviewer
+from .reviewer import (
+    ClaudeReviewer,
+    ReviewCritique,
+    Reviewer,
+    WriterReviewerGenerator,
+)
 
 __all__ = [
     "ClaudeGenerator",
+    "ClaudeReviewer",
     "FailedAttempt",
     "FakeGenerator",
+    "FakeReviewer",
     "GeneratedTest",
     "GenerationRequest",
     "Generator",
     "ProjectConventions",
+    "ReviewCritique",
+    "Reviewer",
+    "WriterReviewerGenerator",
 ]

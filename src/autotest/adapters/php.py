@@ -173,6 +173,16 @@ def generate(
     mutation_timeout: int = typer.Option(
         600, "--mutation-timeout", help="Per-test mutation runner timeout in seconds."
     ),
+    reviewer: bool = typer.Option(
+        False,
+        "--reviewer/--no-reviewer",
+        help="Two-pass Writer/Reviewer flow (triples LLM cost; off by default).",
+    ),
+    reviewer_model: str = typer.Option(
+        "claude-opus-4-7",
+        "--reviewer-model",
+        help="Reviewer model (stronger than the writer is the whole point).",
+    ),
 ) -> None:
     """Generate tests for every public method / function in ``target``.
 
@@ -195,6 +205,8 @@ def generate(
         raise typer.Exit(code=1)
 
     gen = _resolve_generator(generator_name, model)
+    if reviewer:
+        gen = _wrap_with_reviewer(gen, reviewer_model, generator_name)
 
     options = GenerateOptions(
         project_root=project_root.resolve(),
@@ -225,3 +237,24 @@ def _resolve_generator(name: str, model: str):
 
         return ClaudeGenerator(model=model)
     raise typer.BadParameter(f"Unknown generator: {name}. Use 'claude' or 'fake'.")
+
+
+def _wrap_with_reviewer(writer, reviewer_model: str, generator_name: str):
+    """Compose the writer with the corresponding reviewer backend.
+
+    ``--generator=fake`` pairs with FakeReviewer so dry-runs stay
+    LLM-free; ``--generator=claude`` pairs with ClaudeReviewer.
+    """
+    from ..generation.reviewer import WriterReviewerGenerator
+
+    if generator_name.lower() == "fake":
+        from ..generation.fake import FakeReviewer
+
+        return WriterReviewerGenerator(writer=writer, reviewer=FakeReviewer())
+
+    from ..generation.reviewer import ClaudeReviewer
+
+    return WriterReviewerGenerator(
+        writer=writer,
+        reviewer=ClaudeReviewer(model=reviewer_model),
+    )
