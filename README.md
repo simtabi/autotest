@@ -53,6 +53,32 @@ pnpm add -D @simtabi/autotest-js
 
 The wrappers transparently delegate to the Python core.
 
+## Quick start guide and usage
+
+### Getting started
+
+1. Confirm the CLI is on your PATH: `autotest version`.
+2. For the default Claude generator, export your key: `export ANTHROPIC_API_KEY=sk-ant-...`
+   (`--generator=fake` needs no key).
+3. Run from the PHP project root, or pass `--project-root`. Generated tests are run with
+   `vendor/bin/pest`, and the mutation gate with Pest `--mutate`, so the project needs Pest
+   installed.
+
+### Usage
+
+```bash
+# Walk a PHP file and list public methods (no LLM, no API key needed)
+autotest php inventory src/Services/IconBrowserService.php
+```
+
+```bash
+# Generate tests with Claude (requires ANTHROPIC_API_KEY)
+autotest php generate src/Services/IconBrowserService.php \
+    --project-root . --max-attempts=3
+```
+
+More examples are in [Usage (Phase 1)](#usage-phase-1), and every flag is listed under [What works today](#what-works-today).
+
 ## Usage (Phase 1)
 
 ```bash
